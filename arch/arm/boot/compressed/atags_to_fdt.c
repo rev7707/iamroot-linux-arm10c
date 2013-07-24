@@ -95,7 +95,7 @@ static void merge_fdt_bootargs(void *fdt, const char *fdt_cmdline)
 int atags_to_fdt(void *atag_list, void *fdt, int total_space)
 {
 	struct tag *atag = atag_list;
-	uint32_t mem_reg_property[2 * NR_BANKS];
+	uint32_t mem_reg_property[2 * NR_BANKS];//default =8
 	int memcount = 0;
 	int ret;
 

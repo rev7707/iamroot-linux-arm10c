@@ -283,16 +283,23 @@ restart:	adr	r0, LC0
 		 * We might be running at a different address.  We need
 		 * to fix up various pointers.
 		 */
+							//r0는 runtime의 LC0의 주소.
 		sub	r0, r0, r1		@ calculate the delta offset
 		add	r6, r6, r0		@ _edata
+						
 		add	r10, r10, r0		@ inflated kernel size location
-
+								// r10=input_data_end-4, piggy next address. 
+								// global은 실제 메모리를 잡지는 것이 아니고, symbol을 global하겠다는 의미	
 		/*
 		 * The kernel build system appends the size of the
 		 * decompressed kernel at the end of the compressed data
 		 * in little-endian form.
 		 */
-		ldrb	r9, [r10, #0]
+		
+		// r9: piggy의 마지막 4byte에 압축해제된 사이즈를 넣어 두었다.
+		// 0x12345678   => addr 0:78, 1:56, 2:34, 4:12
+		
+		ldrb	r9, [r10, #0]  
 		ldrb	lr, [r10, #1]
 		orr	r9, r9, lr, lsl #8
 		ldrb	lr, [r10, #2]
@@ -334,13 +341,13 @@ restart:	adr	r0, LC0
  * dtb data will get relocated along with the kernel if necessary.
  */
 
-		ldr	lr, [r6, #0]
+		ldr	lr, [r6, #0]		//lr=*(_edata) zImage의 끝의 값
 #ifndef __ARMEB__
 		ldr	r1, =0xedfe0dd0		@ sig is 0xd00dfeed big endian
 #else
 		ldr	r1, =0xd00dfeed
 #endif
-		cmp	lr, r1
+		cmp	lr, r1				//DTB이면 r1의 값과 같을 것이다.
 		bne	dtb_check_done		@ not found
 
 #ifdef CONFIG_ARM_ATAG_DTB_COMPAT
@@ -355,9 +362,9 @@ restart:	adr	r0, LC0
 		*/
 		add	sp, sp, #0x10000
 		stmfd	sp!, {r0-r3, ip, lr}
-		mov	r0, r8
-		mov	r1, r6
-		sub	r2, sp, r6
+		mov	r0, r8						// atags/DTB
+		mov	r1, r6						// _edata
+		sub	r2, sp, r6					// total space of stack	that you can use
 		bl	atags_to_fdt
 
 		/*
@@ -365,9 +372,9 @@ restart:	adr	r0, LC0
 		 * pointed by r8.  Try the typical 0x100 offset from start
 		 * of RAM and hope for the best.
 		 */
-		cmp	r0, #1
-		sub	r0, r4, #TEXT_OFFSET
-		add	r0, r0, #0x100
+		cmp	r0, #1						//zeroflag
+		sub	r0, r4, #TEXT_OFFSET		// defined in Makefile
+		add	r0, r0, #0x100				
 		mov	r1, r6
 		sub	r2, sp, r6
 		bleq	atags_to_fdt
@@ -386,12 +393,13 @@ restart:	adr	r0, LC0
 		 */
 		ldr	r5, =_kernel_bss_size
 		adr	r1, wont_overwrite
-		sub	r1, r6, r1
-		subs	r1, r5, r1
-		addhi	r9, r9, r1
+		sub	r1, r6, r1			// r1 = r6:DTB - wont_overwrite
+		subs	r1, r5, r1		// r1 = kernel bss size - r1
+		addhi	r9, r9, r1		
 
 		/* Get the dtb's size */
 		ldr	r5, [r6, #4]
+
 #ifndef __ARMEB__
 		/* convert r5 (dtb size) to little endian */
 		eor	r1, r5, r5, ror #16
@@ -420,10 +428,10 @@ dtb_check_done:
  *   r4 - 16k page directory >= r10 -> OK
  *   r4 + image length <= address of wont_overwrite -> OK
  */
-		add	r10, r10, #16384
+		add	r10, r10, #16384	// end vmlinux + 16 < decomp kernel start addr
 		cmp	r4, r10
 		bhs	wont_overwrite
-		add	r10, r4, r9
+		add	r10, r4, r9			// decom kernel start + decom k size < wont overwrite
 		adr	r9, wont_overwrite
 		cmp	r10, r9
 		bls	wont_overwrite
@@ -829,7 +837,7 @@ __setup_mmu:	sub	r3, r4, #16384		@ Page directory size
 		mov	r2, r2, lsr #20		// r2 = pc(r2) > 20
 		orr	r1, r1, r2, lsl #20	// r1 = 0xc0E | ( pc & 0xfff00000 )
 						// 현재 pc에 해당하는 Section에 대한 디스크립터
-		add	r0, r3, r2, lsl #2	// r0 = 0x40004000(r3) + (( pc > 20 ) < 2)
+		add	r0, r3, r2, lsl #2	// r0 = 0x40004000(r3) + (( pc > 20 ) < 2), 18bit:pagetable base, 12bit:offset(4096), 2bit:section
 						// 현재 pc에 해당하는 Section에 대한 Page table address
 		str	r1, [r0], #4		// *r0 = 0xc0e | ( pc & 0xfff00000 ) , r0 += 4
 		add	r1, r1, #1048576	// r1 = ( 0xc0e | ( pc & 0xfff00000 ) ) + 0x100000(1048576)
