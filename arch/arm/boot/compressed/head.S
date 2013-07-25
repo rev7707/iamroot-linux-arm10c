@@ -283,12 +283,15 @@ restart:	adr	r0, LC0
 		 * We might be running at a different address.  We need
 		 * to fix up various pointers.
 		 */
-							//r0는 runtime의 LC0의 주소.
+							//보정하는 값을 구한다.(실제의 시작위치주소를 r0에 셋팅한다.
+							// [ r0 = r0(실제 수행되는 LC0 주소) - r1(코드상에서 절대 주소) = 프로그램 시작 위치 ]
 		sub	r0, r0, r1		@ calculate the delta offset
-		add	r6, r6, r0		@ _edata
+		add	r6, r6, r0		@ _edata	
+							//_edata::vmlinux.lds에 정의, got섹션 다음에 위치하며 아래에 stack,bss,debug등 섹션이 제거된 zImage의 끝을 가리키게된다.
 						
 		add	r10, r10, r0		@ inflated kernel size location
-								// r10=input_data_end-4, piggy next address. 
+								// inflaged :: kernel size가 붙여졌다는 의미.
+								// r10=input_data_end-4, piggy next address. piggy.lzma.S 에 정의
 								// global은 실제 메모리를 잡지는 것이 아니고, symbol을 global하겠다는 의미	
 		/*
 		 * The kernel build system appends the size of the
@@ -296,9 +299,25 @@ restart:	adr	r0, LC0
 		 * in little-endian form.
 		 */
 		
+		/*!  
+	    * 현재 설정이 만약 big-endian 이더라도 little-endian 방식으로 읽어서 값을 제대로 읽을수 있도록 하여준다.
+	    * [ 리틀엔디안 = 낮은 주소에 하위바이트부터 저장, 빅엔디안 = 낮은 주소에 상위바이트부터 저장 ]
+	    * [ (MSB 0x12345678 LSB) 는 0번지에 리틀엔디안에서는 (낮'78 56 34 12'높), 빅엔디안은 (낮'12 34 56 78'높) 로 저장 ]
+	    * [ 따라서 0번지에 '12 34 56 78'가 저장되어 있다면 리틀엔디안으로 읽으면 78563412, 빅엔디안으로 읽으면 12345678 ]
+	    * [ 리틀엔디안, 빅엔디안 상관없이 78563412로 읽기 위한 코드.  리틀엔디안에서는 'ldr r9, [r10]' 과 동일 ]
+	    *
+	    * ldrb    r9, [r10, #0]        [  r9 = 0x00000012 빅엔디안인 경우의 예 MSB ]
+	    * ldrb    lr, [r10, #1]        [  lr = 0x00000034 빅엔디안인 경우의 예 MSB ]
+	    * orr r9, r9, lr, lsl #8       [  r9 = 0x00003412 빅엔디안인 경우의 예 MSB ]
+	    * ldrb    lr, [r10, #2]        [  lr = 0x00000056 빅엔디안인 경우의 예 MSB ]
+	    * ldrb    r10, [r10, #3]       [ r10 = 0x00000078 빅엔디안인 경우의 예 MSB ]
+	    * orr r9, r9, lr, lsl #16      [  r9 = 0x00563412 빅엔디안인 경우의 예 MSB ]
+	    * orr r9, r9, r10, lsl #24     [  r9 = 0x78563412 빅엔디안인 경우의 예 MSB ]
+	    */
+
 		// r9: piggy의 마지막 4byte에 압축해제된 사이즈를 넣어 두었다.
-		// 0x12345678   => addr 0:78, 1:56, 2:34, 4:12
-		
+		// ldrb :: load byte to register
+
 		ldrb	r9, [r10, #0]  
 		ldrb	lr, [r10, #1]
 		orr	r9, r9, lr, lsl #8
@@ -309,8 +328,8 @@ restart:	adr	r0, LC0
 
 #ifndef CONFIG_ZBOOT_ROM
 		/* malloc space is above the relocated stack (64k max) */
-		add	sp, sp, r0
-		add	r10, sp, #0x10000
+		add	sp, sp, r0				//r0:delta offset, sp를 runtime 주소에 맞도록 수정. 
+		add	r10, sp, #0x10000		// 64k 추가, r10은 스택까지 포함한 Image의 끝을 가리킨다.
 #else
 		/*
 		 * With ZBOOT_ROM the bss/stack is non relocatable,
@@ -328,11 +347,11 @@ restart:	adr	r0, LC0
  *   r3  = BSS end
  *   r4  = final kernel address
  *   r5  = appended dtb size (still unknown)
- *   r6  = _edata
+ *   r6  = _edata, bss start addr
  *   r7  = architecture ID
  *   r8  = atags/device tree pointer
  *   r9  = size of decompressed image
- *   r10 = end of this image, including  bss/stack/malloc space if non XIP
+ *   r10 = end of this image, including  bss/stack/malloc space if non XIP, End of stack
  *   r11 = GOT start
  *   r12 = GOT end
  *   sp  = stack pointer
@@ -360,12 +379,14 @@ restart:	adr	r0, LC0
 		 * area.  No GOT fixup has occurred yet, but none of the
 		 * code we're about to call uses any global variable.
 		*/
-		add	sp, sp, #0x10000
+		// DTB가 zImage에 붙어있고, r8에 atags가 있을 경우 DTB로 변환해준다.
+
+		add	sp, sp, #0x10000			// 레지스터 저장 및 atags_to_fdt의  임시공간 마련.
 		stmfd	sp!, {r0-r3, ip, lr}
 		mov	r0, r8						// atags/DTB
 		mov	r1, r6						// _edata
-		sub	r2, sp, r6					// total space of stack	that you can use
-		bl	atags_to_fdt
+		sub	r2, sp, r6					// total space of stack	that you can use, stack end-_edata:size of stack. 
+		bl	atags_to_fdt                // int atags_to_fdt(void *atag_list, void *fdt, int total_space)
 
 		/*
 		 * If returned value is 1, there is no ATAG at the location
@@ -379,18 +400,22 @@ restart:	adr	r0, LC0
 		sub	r2, sp, r6
 		bleq	atags_to_fdt
 
-		ldmfd	sp!, {r0-r3, ip, lr}
-		sub	sp, sp, #0x10000
+		ldmfd	sp!, {r0-r3, ip, lr}	
+		sub	sp, sp, #0x10000			//임시공간 반환.
 #endif
 
 		mov	r8, r6			@ use the appended device tree
-
+							// r6:_edata
 		/*
 		 * Make sure that the DTB doesn't end up in the final
 		 * kernel's .bss area. To do so, we adjust the decompressed
 		 * kernel size to compensate if that .bss size is larger
 		 * than the relocated code.
+		 *
+		 * DTB가 커널의 bss 영역안에서 끝나지 않는지 확인하라.
+		 * 이 bss 사이즈가 재배치 코드보다 크다면 이것을 보상하기 위해 압축풀린 커널의 사이즈를 수정할 것이다.
 		 */
+
 		ldr	r5, =_kernel_bss_size
 		adr	r1, wont_overwrite
 		sub	r1, r6, r1			// r1 = r6:DTB - wont_overwrite
