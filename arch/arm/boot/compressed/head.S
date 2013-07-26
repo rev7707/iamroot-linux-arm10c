@@ -328,8 +328,18 @@ restart:	adr	r0, LC0
 
 #ifndef CONFIG_ZBOOT_ROM
 		/* malloc space is above the relocated stack (64k max) */
+
+     // +------+
+     // |BSS   |    
+     // +------+ 
+     // |4KB   |
+     // +------+  현재 SP
+     // |64KB  |
+     // +------+ r10 
+
 		add	sp, sp, r0				//r0:delta offset, sp를 runtime 주소에 맞도록 수정. 
 		add	r10, sp, #0x10000		// 64k 추가, r10은 스택까지 포함한 Image의 끝을 가리킨다.
+
 #else
 		/*
 		 * With ZBOOT_ROM the bss/stack is non relocatable,
@@ -393,7 +403,7 @@ restart:	adr	r0, LC0
 		 * pointed by r8.  Try the typical 0x100 offset from start
 		 * of RAM and hope for the best.
 		 */
-		cmp	r0, #1						//zeroflag
+		cmp	r0, #1						// cpsr zeroflag may be set
 		sub	r0, r4, #TEXT_OFFSET		// defined in Makefile
 		add	r0, r0, #0x100				
 		mov	r1, r6
@@ -401,26 +411,27 @@ restart:	adr	r0, LC0
 		bleq	atags_to_fdt
 
 		ldmfd	sp!, {r0-r3, ip, lr}	
-		sub	sp, sp, #0x10000			//임시공간 반환.
+		sub	sp, sp, #0x10000			// 임시공간 반환.
 #endif
 
 		mov	r8, r6			@ use the appended device tree
-							// r6:_edata
+							      // r6:_edata ->  DTB start.
 		/*
 		 * Make sure that the DTB doesn't end up in the final
 		 * kernel's .bss area. To do so, we adjust the decompressed
 		 * kernel size to compensate if that .bss size is larger
 		 * than the relocated code.
 		 *
-		 * DTB가 커널의 bss 영역안에서 끝나지 않는지 확인하라.
+		 * DTB가 압푼커널의 bss 영역안에서 끝나지 않는지 않게 하라. => 커널 크기를 늘리면 bss가 밀린다(?)
 		 * 이 bss 사이즈가 재배치 코드보다 크다면 이것을 보상하기 위해 압축풀린 커널의 사이즈를 수정할 것이다.
+       * 
 		 */
 
 		ldr	r5, =_kernel_bss_size
 		adr	r1, wont_overwrite
-		sub	r1, r6, r1			// r1 = r6:DTB - wont_overwrite
-		subs	r1, r5, r1		// r1 = kernel bss size - r1
-		addhi	r9, r9, r1		
+		sub	r1, r6, r1			// r1 = r6:DTB - wont_overwrite => 앞으로 필요한 재배치코드+piggy의 사이즈
+		subs	r1, r5, r1		   // r1 = kernel bss size - r1 => BSS가 재배치코드보다 크면,
+		addhi	r9, r9, r1		   // 압푼커널의 사이즈에DTB초과 사이즈만큼 늘린다. 
 
 		/* Get the dtb's size */
 		ldr	r5, [r6, #4]
@@ -434,13 +445,13 @@ restart:	adr	r0, LC0
 #endif
 
 		/* preserve 64-bit alignment */
-		add	r5, r5, #7
+		add	r5, r5, #7     // DTB size -> 8byte align
 		bic	r5, r5, #7
 
 		/* relocate some pointers past the appended dtb */
-		add	r6, r6, r5
-		add	r10, r10, r5
-		add	sp, sp, r5
+		add	r6, r6, r5     // _edata += DTB size
+		add	r10, r10, r5   // end of this Image(inclue bss, stack) size += DTB size
+		add	sp, sp, r5     // stack base += DTB size
 dtb_check_done:
 #endif
 
@@ -453,9 +464,9 @@ dtb_check_done:
  *   r4 - 16k page directory >= r10 -> OK
  *   r4 + image length <= address of wont_overwrite -> OK
  */
-		add	r10, r10, #16384	// end vmlinux + 16 < decomp kernel start addr
-		cmp	r4, r10
-		bhs	wont_overwrite
+		add	r10, r10, #16384	// end of this image + 16k 
+		cmp	r4, r10           // 압풀 커널의 위치가 뒤 쪽에 있으면
+		bhs	wont_overwrite    // wont_overwrite로 이동 아니면,
 		add	r10, r4, r9			// decom kernel start + decom k size < wont overwrite
 		adr	r9, wont_overwrite
 		cmp	r10, r9
