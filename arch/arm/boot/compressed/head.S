@@ -429,9 +429,9 @@ restart:	adr	r0, LC0
 
 		ldr	r5, =_kernel_bss_size
 		adr	r1, wont_overwrite
-		sub	r1, r6, r1			// r1 = r6:DTB - wont_overwrite => 앞으로 필요한 재배치코드+piggy의 사이즈
-		subs	r1, r5, r1		   // r1 = kernel bss size - r1 => BSS가 재배치코드보다 크면,
-		addhi	r9, r9, r1		   // 압푼커널의 사이즈에DTB초과 사이즈만큼 늘린다. 
+		sub	r1, r6, r1				// r1 = r6:DTB - wont_overwrite => 앞으로 필요한 재배치코드+piggy의 사이즈
+		subs	r1, r5, r1			// r1 = kernel bss size - r1 => BSS가 재배치코드보다 크면,
+		addhi	r9, r9, r1			// 압푼커널의 사이즈에 재배치코드 사이즈만큼 늘인다. 
 
 		/* Get the dtb's size */
 		ldr	r5, [r6, #4]
@@ -464,14 +464,25 @@ dtb_check_done:
  *   r4 - 16k page directory >= r10 -> OK
  *   r4 + image length <= address of wont_overwrite -> OK
  */
-		add	r10, r10, #16384	// end of this image + 16k 
-		cmp	r4, r10           // 압풀 커널의 위치가 뒤 쪽에 있으면
-		bhs	wont_overwrite    // wont_overwrite로 이동 아니면,
+		add	r10, r10, #16384	// end of this image + 16k(DTB max) 
+		cmp	r4, r10           // 압푼커널의 위치가 뒤 쪽에 있으면
+		bhs	wont_overwrite    
 		add	r10, r4, r9			// decom kernel start + decom k size < wont overwrite
 		adr	r9, wont_overwrite
 		cmp	r10, r9
 		bls	wont_overwrite
 
+/*
+	겹치지 않는 경우.
+   | zimage |					| vmlinux |
+   +--------+					+---------+<-- r4
+   | 16k    |    				| wont'_o |<-- r9
+   +--------+<--r4,r10			+---------+
+   | vmlinux|					| zimage  |
+ */
+
+
+//이제부터 겹치는 경우 재배치를 한다.		
 /*
  * Relocate ourselves past the end of the decompressed kernel.
  *   r6  = _edata
@@ -485,7 +496,7 @@ dtb_check_done:
 		 * ourself when the offset is small.
 		 */
 		add	r10, r10, #((reloc_code_end - restart + 256) & ~255)
-		bic	r10, r10, #255
+		bic	r10, r10, #255 // 8bit clear
 
 		/* Get start of code we want to copy and align it down. */
 		adr	r5, restart
@@ -504,10 +515,11 @@ dtb_check_done:
 		bl	__hyp_set_vectors
 1:
 #endif
+		// r6: source, r9:destination 계산. 압푼커널vmlinux+bump 밑으로 이동시킨다.
 
 		sub	r9, r6, r5		@ size to copy
 		add	r9, r9, #31		@ rounded up to a multiple
-		bic	r9, r9, #31		@ ... of 32 bytes
+		bic	r9, r9, #31		@ ... of 32 bytes(5bit clear)
 		add	r6, r9, r5
 		add	r9, r9, r10
 
