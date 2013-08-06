@@ -622,7 +622,12 @@ not_relocated:	mov	r0, #0
 		mov	r1, sp			@ malloc space above stack
 		add	r2, sp, #0x10000	@ 64k max
 		mov	r3, r7
-		bl	decompress_kernel
+		bl	decompress_kernel	
+
+		// void decompress_kernel(unsigned long output_start, 
+		// unsigned long free_mem_ptr_p, unsigned long free_mem_ptr_end_p,
+		//  int arch_id)
+
 		bl	cache_clean_flush
 		bl	cache_off
 		mov	r1, r7			@ restore architecture number
@@ -1346,22 +1351,45 @@ __armv7_mmu_cache_flush:
 		mcr	p15, 0, r10, c7, c14, 0	@ clean+invalidate D
 		b	iflush
 hierarchical:
-		mcr	p15, 0, r10, c7, c10, 5	@ DMB
+		mcr	p15, 0, r10, c7, c10, 5	@ DMB, Data & instruction barrier operation
 		stmfd	sp!, {r0-r7, r9-r11}
-		mrc	p15, 1, r0, c0, c0, 1	@ read clidr
-		ands	r3, r0, #0x7000000	@ extract loc from clidr
+		mrc	p15, 1, r0, c0, c0, 1	@ read clidr, cache level id register, T.R.M:121p(4.3.22)
+		ands	r3, r0, #0x7000000	@ extract loc from clidri, 
+									// level of coherency
+									// flush하기 위한 cache level 값을 확인.
 		mov	r3, r3, lsr #23		@ left align loc bit field
+									// 하위 0하나를 남기고 0을 모두 없앰.
+									// r3=4, loc=2(cortex a15, memory hierarchy가 3차라는 뜻)
 		beq	finished		@ if loc is 0, then no need to clean
+									
 		mov	r10, #0			@ start clean at cache level 0
 loop1:
 		add	r2, r10, r10, lsr #1	@ work out 3x current cache level
+									// r2:cache level 1->3까지 계산하기 위한 임시값.
+									// r10: 0->2+1(3)->4+2(6)->6+3(9) Ctype의 bit offset
+									// r1은 Ctype의 값
 		mov	r1, r0, lsr r2		@ extract cache type bits from clidr
 		and	r1, r1, #7		@ mask of the bits for current cache only
-		cmp	r1, #2			@ see what cache we have at this level
+		cmp	r1, #2			@ see what cache we have at this level, Data cache인지 확인.
+        @@ +------+---------+
+	    @@ |00    |no       |
+	    @@ |      |cache    |
+	    @@ +------+---------+
+	    @@ |01    |icache   |
+	    @@ +------+---------+
+	    @@ |10    |data     |
+	    @@ |      |cache    |
+	    @@ +------+---------+
+	    @@ |11    |I/D Cache|
+	    @@ +------+---------+
+
 		blt	skip			@ skip if no cache, or just i-cache
 		mcr	p15, 2, r10, c0, c0, 0	@ select current cache level in cssr
+									// ccsr::cache size selection register
+									// csidr::cache size id register
+									//A.R.M(B4.1.41)
 		mcr	p15, 0, r10, c7, c5, 4	@ isb to sych the new cssr&csidr
-		mrc	p15, 1, r1, c0, c0, 0	@ read the new csidr
+		mrc	p15, 1, r1, c0, c0, 0	@ read the new csidr, cache line size.
 		and	r2, r1, #7		@ extract the length of the cache lines
 		add	r2, r2, #4		@ add 4 (line length offset)
 		ldr	r4, =0x3ff
@@ -1371,9 +1399,10 @@ loop1:
 		ands	r7, r7, r1, lsr #13	@ extract max number of the index size
 loop2:
 		mov	r9, r4			@ create working copy of max way size
+							// r9:associactivity
 loop3:
- ARM(		orr	r11, r10, r9, lsl r5	) @ factor way and cache number into r11
- ARM(		orr	r11, r11, r7, lsl r2	) @ factor index number into r11
+ ARM(		orr	r11, r10, r9, lsl r5	) @ factor way and cache number into r11,  r9::way
+ ARM(		orr	r11, r11, r7, lsl r2	) @ factor index number into r11, r7::index
  THUMB(		lsl	r6, r9, r5		)
  THUMB(		orr	r11, r10, r6		) @ factor way and cache number into r11
  THUMB(		lsl	r6, r7, r2		)
@@ -1384,8 +1413,8 @@ loop3:
 		subs	r7, r7, #1		@ decrement the index
 		bge	loop2
 skip:
-		add	r10, r10, #2		@ increment cache number
-		cmp	r3, r10
+		add	r10, r10, #2		@ increment cache number, cache level 증가.
+		cmp	r3, r10				// r3=loc*2, r10: cache의 level
 		bgt	loop1
 finished:
 		ldmfd	sp!, {r0-r7, r9-r11}
