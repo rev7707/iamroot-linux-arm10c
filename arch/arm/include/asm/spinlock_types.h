@@ -22,7 +22,7 @@ typedef struct {
 	};
 } arch_spinlock_t;
 
-#define __ARCH_SPIN_LOCK_UNLOCKED	{ { 0 } }
+#define __ARCH_SPIN_LOCK_UNLOCKED	{ { 0 } }	//GFS
 
 typedef struct {
 	volatile unsigned int lock;

@@ -8,7 +8,8 @@
 #define L1_CACHE_ALIGN(x) ALIGN(x, L1_CACHE_BYTES)
 #endif
 
-#ifndef SMP_CACHE_BYTES
+#ifndef SMP_CACHE_BYTES		//GFS
+//L1_CACHE_BYTES=64
 #define SMP_CACHE_BYTES L1_CACHE_BYTES
 #endif
 
@@ -16,7 +17,7 @@
 #define __read_mostly
 #endif
 
-#ifndef ____cacheline_aligned
+#ifndef ____cacheline_aligned		//GFS, 64byte alig(Cortex-A15)
 #define ____cacheline_aligned __attribute__((__aligned__(SMP_CACHE_BYTES)))
 #endif
 

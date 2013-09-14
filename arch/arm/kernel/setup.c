@@ -130,7 +130,7 @@ struct stack {
 
 static struct stack stacks[NR_CPUS];
 
-char elf_platform[ELF_PLATFORM_SIZE];
+char elf_platform[ELF_PLATFORM_SIZE]; //8
 EXPORT_SYMBOL(elf_platform);
 
 static const char *cpu_name;
@@ -216,9 +216,11 @@ static const char *proc_arch[] = {
 	"?(17)",
 };
 
-static int __get_cpu_architecture(void)
+static int __get_cpu_architecture(void)//GFS
 {
 	int cpu_arch;
+
+	//A.R.M B6.1.52 VMSA, PMSA
 
 	if ((read_cpuid_id() & 0x0008f000) == 0) {
 		cpu_arch = CPU_ARCH_UNKNOWN;
@@ -249,6 +251,10 @@ static int __get_cpu_architecture(void)
 	return cpu_arch;
 }
 
+
+//const(함수의 상수화)  attribute와 비슷함.
+// pure 는 Global변수를 읽기를 수 있다.
+//http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html
 int __pure cpu_architecture(void)
 {
 	BUG_ON(__cpu_architecture == CPU_ARCH_UNKNOWN);
@@ -291,20 +297,22 @@ static int cpu_has_aliasing_icache(unsigned int arch)
 
 static void __init cacheid_init(void)
 {
-	unsigned int arch = cpu_architecture();
+	unsigned int arch = cpu_architecture();	//9
 
 	if (arch >= CPU_ARCH_ARMv6) {
+		
+		//TRM 4.3.2 Cache Type Register physical idex, tag
 		unsigned int cachetype = read_cpuid_cachetype();
 		if ((cachetype & (7 << 29)) == 4 << 29) {
 			/* ARMv7 register format */
 			arch = CPU_ARCH_ARMv7;
 			cacheid = CACHEID_VIPT_NONALIASING;
-			switch (cachetype & (3 << 14)) {
-			case (1 << 14):
+			switch (cachetype & (3 << 14)) {		
+			case (1 << 14):							//아님.
 				cacheid |= CACHEID_ASID_TAGGED;
 				break;
 			case (3 << 14):
-				cacheid |= CACHEID_PIPT;
+				cacheid |= CACHEID_PIPT;		//PIPT 설정.
 				break;
 			}
 		} else {
@@ -360,6 +368,8 @@ static void __init cpuid_init_hwcaps(void)
 	if (cpu_architecture() < CPU_ARCH_ARMv7)
 		return;
 
+	//ARM B6.1.46 CPUID_EXT_ISAR0:instruction Set Attribute Register 0:Divide_instrs
+	//나눗셈 명령어를 하드웨어로 지원 확인.
 	divide_instrs = (read_cpuid_ext(CPUID_EXT_ISAR0) & 0x0f000000) >> 24;
 
 	switch (divide_instrs) {
@@ -372,7 +382,7 @@ static void __init cpuid_init_hwcaps(void)
 
 static void __init feat_v6_fixup(void)
 {
-	int id = read_cpuid_id();
+	int id = read_cpuid_id();	//id:0x410fc0f0
 
 	if ((id & 0xff0f0000) != 0x41070000)
 		return;
@@ -446,6 +456,8 @@ void notrace cpu_init(void)
 
 u32 __cpu_logical_map[NR_CPUS] = { [0 ... NR_CPUS-1] = MPIDR_INVALID };
 
+//ARM10C_20130824
+// cpu_logical_map의 배열에 CPUID 0~3을 넣어준다.
 void __init smp_setup_processor_id(void)
 {
 	int i;
@@ -459,6 +471,7 @@ void __init smp_setup_processor_id(void)
 	printk(KERN_INFO "Booting Linux on physical CPU 0x%x\n", mpidr);
 }
 
+//ARM10C_20130914
 static void __init setup_processor(void)
 {
 	struct proc_info_list *list;
@@ -475,19 +488,19 @@ static void __init setup_processor(void)
 		while (1);
 	}
 
-	cpu_name = list->cpu_name;
-	__cpu_architecture = __get_cpu_architecture();
+	cpu_name = list->cpu_name;	// "ARMv7 Processor"
+	__cpu_architecture = __get_cpu_architecture();	// CPU_ARCH_ARMv7 = 9
 
-#ifdef MULTI_CPU
+#ifdef MULTI_CPU	//undefined
 	processor = *list->proc;
 #endif
-#ifdef MULTI_TLB
-	cpu_tlb = *list->tlb;
+#ifdef MULTI_TLB //defined
+	cpu_tlb = *list->tlb; //v7wbi_tlb_fns, 0으로 초기화
 #endif
-#ifdef MULTI_USER
-	cpu_user = *list->user;
+#ifdef MULTI_USER //defined
+	cpu_user = *list->user;	//0으로 초기화
 #endif
-#ifdef MULTI_CACHE
+#ifdef MULTI_CACHE //defined, defined _CACHE v7
 	cpu_cache = *list->cache;
 #endif
 
@@ -495,15 +508,15 @@ static void __init setup_processor(void)
 	       cpu_name, read_cpuid_id(), read_cpuid_id() & 15,
 	       proc_arch[cpu_architecture()], cr_alignment);
 
-	snprintf(init_utsname()->machine, __NEW_UTS_LEN + 1, "%s%c",
+	snprintf(init_utsname()->machine, __NEW_UTS_LEN + 1, "%s%c",		//__NEW_UTS_LEN:64 
 		 list->arch_name, ENDIANNESS);
-	snprintf(elf_platform, ELF_PLATFORM_SIZE, "%s%c",
+	snprintf(elf_platform, ELF_PLATFORM_SIZE, "%s%c",				//cpu_elf_name "v7", ELF_PLATFORM_SIZE:8
 		 list->elf_name, ENDIANNESS);
-	elf_hwcap = list->elf_hwcap;
+	elf_hwcap = list->elf_hwcap;								
 
 	cpuid_init_hwcaps();
 
-#ifndef CONFIG_ARM_THUMB
+#ifndef CONFIG_ARM_THUMB		//def no
 	elf_hwcap &= ~(HWCAP_THUMB | HWCAP_IDIVT);
 #endif
 

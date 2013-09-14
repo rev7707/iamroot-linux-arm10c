@@ -3900,6 +3900,7 @@ void lockdep_free_key_range(void *start, unsigned long size)
 	/*
 	 * Unhash all classes that were created by this module:
 	 */
+
 	for (i = 0; i < CLASSHASH_SIZE; i++) {
 		head = classhash_table + i;
 		if (list_empty(head))
@@ -3984,8 +3985,9 @@ void lockdep_init(void)
 	if (lockdep_initialized)
 		return;
 
+	// CLASSHASH_SIZE:2K개의 CLASS
 	for (i = 0; i < CLASSHASH_SIZE; i++)
-		INIT_LIST_HEAD(classhash_table + i);
+		INIT_LIST_HEAD(classhash_table + i);	// chain linked list
 
 	for (i = 0; i < CHAINHASH_SIZE; i++)
 		INIT_LIST_HEAD(chainhash_table + i);

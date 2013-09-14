@@ -26,6 +26,9 @@ struct processor;
  * language, NOT C code.  For more information, check:
  *  arch/arm/mm/proc-*.S and arch/arm/kernel/head.S
  */
+
+//arch/arm/mm/proc-v7.S
+
 struct proc_info_list {
 	unsigned int		cpu_val;
 	unsigned int		cpu_mask;

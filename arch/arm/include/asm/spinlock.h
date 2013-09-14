@@ -78,16 +78,16 @@ static inline void arch_spin_lock(arch_spinlock_t *lock)
 	arch_spinlock_t lockval;
 
 	__asm__ __volatile__(
-"1:	ldrex	%0, [%3]\n"
-"	add	%1, %0, %4\n"
-"	strex	%2, %1, [%3]\n"
-"	teq	%2, #0\n"
+"1:	ldrex	%0, [%3]\n"			// ldrex lockval, &lock->slock
+"	add	%1, %0, %4\n"			// add newval, lockval, (1<<TCKET_SHIFT) ;; tickets.next += 1
+"	strex	%2, %1, [%3]\n"		// strex tmp, newval, &lock->slock
+"	teq	%2, #0\n"				// teq tmp, #0
 "	bne	1b"
 	: "=&r" (lockval), "=&r" (newval), "=&r" (tmp)
 	: "r" (&lock->slock), "I" (1 << TICKET_SHIFT)
 	: "cc");
 
-	while (lockval.tickets.next != lockval.tickets.owner) {
+	while (lockval.tickets.next != lockval.tickets.owner) {	// unlock에서 tickets.owner++
 		wfe();
 		lockval.tickets.owner = ACCESS_ONCE(lock->tickets.owner);
 	}

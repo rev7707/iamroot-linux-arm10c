@@ -5,6 +5,9 @@
  * Check at compile time that something is of a particular type.
  * Always evaluates to 1 so you may use it easily in comparisons.
  */
+// 함수 설명:
+//http://stackoverflow.com/questions/10393844/about-typecheck-in-linux-kernel
+
 #define typecheck(type,x) \
 ({	type __dummy; \
 	typeof(x) __dummy2; \

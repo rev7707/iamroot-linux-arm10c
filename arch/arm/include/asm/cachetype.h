@@ -43,7 +43,7 @@ extern unsigned int cacheid;
 #define __CACHEID_ALWAYS	(CACHEID_VIVT)
 #define __CACHEID_NEVER		(~CACHEID_VIVT)
 #elif !defined(CONFIG_CPU_CACHE_VIVT) && defined(CONFIG_CPU_CACHE_VIPT)
-#define __CACHEID_ALWAYS	(0)
+#define __CACHEID_ALWAYS	(0)		//GFS
 #define __CACHEID_NEVER		(CACHEID_VIVT)
 #else
 #define __CACHEID_ALWAYS	(0)

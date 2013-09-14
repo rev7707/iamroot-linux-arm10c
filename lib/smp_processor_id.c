@@ -7,10 +7,13 @@
 #include <linux/kallsyms.h>
 #include <linux/sched.h>
 
+//ARM10C 2013/08/24
+//notrace:: attribute->no_instrument_function ??
+
 notrace unsigned int debug_smp_processor_id(void)
 {
-	unsigned long preempt_count = preempt_count();
-	int this_cpu = raw_smp_processor_id();
+	unsigned long preempt_count = preempt_count();	//0x4000_0001
+	int this_cpu = raw_smp_processor_id();			// maybe this_cpu=0
 
 	if (likely(preempt_count))
 		goto out;

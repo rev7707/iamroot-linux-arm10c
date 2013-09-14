@@ -45,8 +45,8 @@
 #ifdef CONFIG_CPU_CP15
 
 extern unsigned long cr_no_alignment;	/* defined in entry-armv.S */
-extern unsigned long cr_alignment;	/* defined in entry-armv.S */
-
+extern unsigned long cr_alignment;	/* defined in entry-armv.S , Address exception handler */
+									// 값세팅:arch/arm/kernel/head-common.S
 static inline unsigned int get_cr(void)
 {
 	unsigned int val;

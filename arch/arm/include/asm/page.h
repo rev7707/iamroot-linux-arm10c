@@ -99,7 +99,7 @@
 # endif
 #endif
 
-#ifdef CONFIG_CPU_COPY_V6
+#ifdef CONFIG_CPU_COPY_V6	//def yes
 # define MULTI_USER 1
 #endif
 

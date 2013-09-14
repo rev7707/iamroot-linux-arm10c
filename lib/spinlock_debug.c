@@ -16,7 +16,8 @@
 void __raw_spin_lock_init(raw_spinlock_t *lock, const char *name,
 			  struct lock_class_key *key)
 {
-#ifdef CONFIG_DEBUG_LOCK_ALLOC
+
+#ifdef CONFIG_DEBUG_LOCK_ALLOC //def no
 	/*
 	 * Make sure we are not reinitializing a held lock:
 	 */
@@ -24,8 +25,8 @@ void __raw_spin_lock_init(raw_spinlock_t *lock, const char *name,
 	lockdep_init_map(&lock->dep_map, name, key, 0);
 #endif
 	lock->raw_lock = (arch_spinlock_t)__ARCH_SPIN_LOCK_UNLOCKED;
-	lock->magic = SPINLOCK_MAGIC;
-	lock->owner = SPINLOCK_OWNER_INIT;
+	lock->magic = SPINLOCK_MAGIC;		//dead4dead
+	lock->owner = SPINLOCK_OWNER_INIT;	//0xFFFFFFFF
 	lock->owner_cpu = -1;
 }
 

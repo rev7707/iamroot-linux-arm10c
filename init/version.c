@@ -22,6 +22,8 @@ extern int version_string(LINUX_VERSION_CODE);
 int version_string(LINUX_VERSION_CODE);
 #endif
 
+//컴파일 후에 생성되는 파일 include/generated/compile.h 에 아래 심볼 정의됨.
+
 struct uts_namespace init_uts_ns = {
 	.kref = {
 		.refcount	= ATOMIC_INIT(2),

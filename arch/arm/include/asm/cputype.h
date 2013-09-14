@@ -60,6 +60,10 @@
 
 extern unsigned int processor_id;
 
+
+//http://wiki.kldp.org/wiki.php/DocbookSgml/GCC_Inline_Assembly-KLDP
+//TRM 4.3.5 Multiprocessor Affinity Register
+
 #ifdef CONFIG_CPU_CP15
 #define read_cpuid(reg)							\
 	({								\
@@ -70,7 +74,7 @@ extern unsigned int processor_id;
 		    : "cc");						\
 		__val;							\
 	})
-
+// ext_reg : "c2, 0"
 #define read_cpuid_ext(ext_reg)						\
 	({								\
 		unsigned int __val;					\
@@ -132,18 +136,22 @@ static inline unsigned int __attribute_const__ xscale_cpu_arch_version(void)
 	return read_cpuid_part_number() & ARM_CPU_XSCALE_ARCH_MASK;
 }
 
-static inline unsigned int __attribute_const__ read_cpuid_cachetype(void)
+static inline unsigned int __attribute_const__ read_cpuid_cachetype(void)	//GFS
 {
-	return read_cpuid(CPUID_CACHETYPE);
+	return read_cpuid(CPUID_CACHETYPE);	//1
 }
 
 static inline unsigned int __attribute_const__ read_cpuid_tcmstatus(void)
 {
 	return read_cpuid(CPUID_TCM);
 }
+//arm10c 2013/08/24
+// attribute_const 는 전역 변수에 접근하지 않는다는 것을 명시한다
+// 같은 함수 반복적으로 호출시 컴파일러에서 여러번 호출하지 않고 계산된 값을 사용하여 최적화 된다.
 
 static inline unsigned int __attribute_const__ read_cpuid_mpidr(void)
 {
+	//ARM.B4.1.106 MPIDR, Multiprocessor Affinity Register
 	return read_cpuid(CPUID_MPIDR);
 }
 

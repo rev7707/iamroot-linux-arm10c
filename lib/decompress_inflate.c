@@ -32,6 +32,8 @@ static int INIT nofill(void *buffer, unsigned int len)
 }
 
 /* Included from initramfs et al code */
+//fill,flush,pos = null
+// 압축을 푸는 함수인것만 알고 넘어감.
 STATIC int INIT gunzip(unsigned char *buf, int len,
 		       int(*fill)(void*, unsigned int),
 		       int(*flush)(void*, unsigned int),

@@ -44,20 +44,23 @@
  *  r5, r6 corrupted
  */
 __vet_atags:
-	tst	r2, #0x3			@ aligned?
-	bne	1f
+	tst	r2, #0x3			@ aligned?, atag나 DTB가 있음.
+	bne	1f					// align이 안되면 점프.
 
-	ldr	r5, [r2, #0]
-#ifdef CONFIG_OF_FLATTREE
-	ldr	r6, =OF_DT_MAGIC		@ is it a DTB?
+	ldr	r5, [r2, #0]		// r2:atag address
+#ifdef CONFIG_OF_FLATTREE		// flatted device tree :: DTB의 옛날 말.
+	ldr	r6, =OF_DT_MAGIC		@ is it a DTB?	// 0xd00dfeed
 	cmp	r5, r6
 	beq	2f
 #endif
+	
+	// atag일경우 ATAG_CORE 가 먼저 와야 하므로, valid한 atag인지 확인.
+
 	cmp	r5, #ATAG_CORE_SIZE		@ is first tag ATAG_CORE?
 	cmpne	r5, #ATAG_CORE_SIZE_EMPTY
-	bne	1f
+	bne	1f							// error exception
 	ldr	r5, [r2, #4]
-	ldr	r6, =ATAG_CORE
+	ldr	r6, =ATAG_CORE				// asm/setup.h
 	cmp	r5, r6
 	bne	1f
 
@@ -81,17 +84,18 @@ __mmap_switched:
 	adr	r3, __mmap_switched_data
 
 	ldmia	r3!, {r4, r5, r6, r7}
-	cmp	r4, r5				@ Copy data segment if needed
-1:	cmpne	r5, r6
-	ldrne	fp, [r4], #4
+	cmp	r4, r5					@ Copy data segment if needed
+1:	cmpne	r5, r6				@ r4==r5, xxne는 모두 skip
+	ldrne	fp, [r4], #4		@ fp:r11
 	strne	fp, [r5], #4
 	bne	1b
 
 	mov	fp, #0				@ Clear BSS (and zero fp)
-1:	cmp	r6, r7
-	strcc	fp, [r6],#4
+1:	cmp	r6, r7				@@ BSS가사이즈가  있으면,
+	strcc	fp, [r6],#4		@@ 0로 채움. xxcc:r6이r7보다 작으면
 	bcc	1b
-
+//2013/08/17 종료
+//2013/08/24 시작 
  ARM(	ldmia	r3, {r4, r5, r6, r7, sp})
  THUMB(	ldmia	r3, {r4, r5, r6, r7}	)
  THUMB(	ldr	sp, [r3, #16]		)
@@ -125,9 +129,9 @@ __mmap_switched_data:
 /*
  * This provides a C-API version of __lookup_processor_type
  */
-ENTRY(lookup_processor_type)
+ENTRY(lookup_processor_type)		
 	stmfd	sp!, {r4 - r6, r9, lr}
-	mov	r9, r0
+	mov	r9, r0							//r0=cpu_id
 	bl	__lookup_processor_type
 	mov	r0, r5
 	ldmfd	sp!, {r4 - r6, r9, pc}
@@ -149,13 +153,16 @@ ENDPROC(lookup_processor_type)
 	__CPUINIT
 __lookup_processor_type:
 	adr	r3, __lookup_processor_type_data
-	ldmia	r3, {r4 - r6}
+	ldmia	r3, {r4 - r6}	// r4:proc_info_begin, r5:info_end, r6:processor_type
 	sub	r3, r3, r4			@ get offset between virt&phys
 	add	r5, r5, r3			@ convert virt addresses to
 	add	r6, r6, r3			@ physical address space
+
+// r9로 CPU에 맞는 processor type을 찾는다.
+	
 1:	ldmia	r5, {r3, r4}			@ value, mask
 	and	r4, r4, r9			@ mask wanted bits
-	teq	r3, r4
+	teq	r3, r4				// test exclusive or
 	beq	2f
 	add	r5, r5, #PROC_INFO_SZ		@ sizeof(proc_info_list)
 	cmp	r5, r6
@@ -171,7 +178,7 @@ ENDPROC(__lookup_processor_type)
 	.type	__lookup_processor_type_data, %object
 __lookup_processor_type_data:
 	.long	.
-	.long	__proc_info_begin
+	.long	__proc_info_begin		//arch/arm/mm/proc-v7.S.. ca15mp
 	.long	__proc_info_end
 	.size	__lookup_processor_type_data, . - __lookup_processor_type_data
 

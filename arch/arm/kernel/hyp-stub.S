@@ -88,7 +88,7 @@ ENTRY(__boot_cpu_mode)
  */
 @ Call this from the primary CPU
 ENTRY(__hyp_stub_install)
-	store_primary_cpu_mode	r4, r5, r6
+	store_primary_cpu_mode	r4, r5, r6			// dfedin kernel/hyp-stub.S	
 ENDPROC(__hyp_stub_install)
 
 	@ fall through...

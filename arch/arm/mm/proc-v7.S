@@ -185,11 +185,12 @@ __v7_ca15mp_setup:
 	mov	r10, #0
 1:
 #ifdef CONFIG_SMP
-	ALT_SMP(mrc	p15, 0, r0, c1, c0, 1)
-	ALT_UP(mov	r0, #(1 << 6))		@ fake it for UP
-	tst	r0, #(1 << 6)			@ SMP/nAMP mode enabled?
+										@ ARM :: implemetion defined -> TRM을 보라
+	ALT_SMP(mrc	p15, 0, r0, c1, c0, 1)  @T.R.M 2.4.3. SMP:enables the processor to receive instruction cache, BTB, and TLB
+	ALT_UP(mov	r0, #(1 << 6))		@ fake it for UP, NOP가 됨.UP일 경우 다른 곳에서 실행.
+	tst	r0, #(1 << 6)				@ SMP/nAMP mode enabled?
 	orreq	r0, r0, #(1 << 6)		@ Enable SMP/nAMP mode
-	orreq	r0, r0, r10			@ Enable CPU-specific SMP bits
+	orreq	r0, r0, r10				@ Enable CPU-specific SMP bits
 	mcreq	p15, 0, r0, c1, c0, 1
 #endif
 	b	__v7_setup
@@ -251,23 +252,24 @@ __v7_pj4b_setup:
 #endif /* CONFIG_CPU_PJ4B */
 
 __v7_setup:
-	adr	r12, __v7_setup_stack		@ the local stack
+	adr	r12, __v7_setup_stack				@ the local stack
 	stmia	r12, {r0-r5, r7, r9, r11, lr}
-	bl      v7_flush_dcache_louis
+	bl      v7_flush_dcache_louis			@ arm/mm/cache-v7.S, D-cache flush by LOUIS
 	ldmia	r12, {r0-r5, r7, r9, r11, lr}
 
 	mrc	p15, 0, r0, c0, c0, 0		@ read main ID register
 	and	r10, r0, #0xff000000		@ ARM?
 	teq	r10, #0x41000000
 	bne	3f
-	and	r5, r0, #0x00f00000		@ variant
-	and	r6, r0, #0x0000000f		@ revision
+	and	r5, r0, #0x00f00000		@ variant: major revision
+	and	r6, r0, #0x0000000f		@ revision: minor revision
 	orr	r6, r6, r5, lsr #20-4		@ combine variant and revision
-	ubfx	r0, r0, #4, #12			@ primary part number
+	ubfx	r0, r0, #4, #12			@ primary part number, 4-17bit 추출.
 
 	/* Cortex-A8 Errata */
+								@ TRM 4.3.1 Main ID Register
 	ldr	r10, =0x00000c08		@ Cortex-A8 primary part number
-	teq	r0, r10
+	teq	r0, r10					@ 0xC0F, TRM 1.8 product revisions, C0F:cortex 15 
 	bne	2f
 #if defined(CONFIG_ARM_ERRATA_430973) && !defined(CONFIG_ARCH_MULTIPLATFORM)
 
@@ -327,21 +329,24 @@ __v7_setup:
 #endif
 
 3:	mov	r10, #0
-	mcr	p15, 0, r10, c7, c5, 0		@ I+BTB cache invalidate
+	mcr	p15, 0, r10, c7, c5, 0		@ I+BTB cache invalidate, unified TLB
 	dsb
 #ifdef CONFIG_MMU
 	mcr	p15, 0, r10, c8, c7, 0		@ invalidate I + D TLBs
 	v7_ttb_setup r10, r4, r8, r5		@ TTBCR, TTBRx setup
-	ldr	r5, =PRRR			@ PRRR
-	ldr	r6, =NMRR			@ NMRR
+							@ proc-v7-2level.S에 PRRR,NMRR
+	ldr	r5, =PRRR			@ PRRR		@Primary Region Remap Register
+	ldr	r6, =NMRR			@ NMRR		@Normal Memory Remap Register,
 	mcr	p15, 0, r5, c10, c2, 0		@ write PRRR
 	mcr	p15, 0, r6, c10, c2, 1		@ write NMRR
 #endif
+
 #ifndef CONFIG_ARM_THUMBEE
-	mrc	p15, 0, r0, c0, c1, 0		@ read ID_PFR0 for ThumbEE
+	mrc	p15, 0, r0, c0, c1, 0		@ read ID_PFR0 for ThumbEE, ThumbEE:thumb, arm mode 호환.
 	and	r0, r0, #(0xf << 12)		@ ThumbEE enabled field
 	teq	r0, #(1 << 12)			@ check if ThumbEE is present
 	bne	1f
+	// ThumbEE를 지원하면 관련 레지스터 셋팅.
 	mov	r5, #0
 	mcr	p14, 6, r5, c1, c0, 0		@ Initialize TEEHBR to 0
 	mrc	p14, 6, r0, c0, c0, 0		@ load TEECR
@@ -349,16 +354,23 @@ __v7_setup:
 	mcr	p14, 6, r0, c0, c0, 0		@ stop userspace TEEHBR access
 1:
 #endif
+
+	//v7_crval:
+	// .word 0x2120c302 (r5) (clear)
+	// .word 0x10c03c7d (r6) (mmuset)
 	adr	r5, v7_crval
 	ldmia	r5, {r5, r6}
+
 #ifdef CONFIG_CPU_ENDIAN_BE8
 	orr	r6, r6, #1 << 25		@ big-endian page tables
 #endif
 #ifdef CONFIG_SWP_EMULATE
+	// swp 명령이 V7에서 없어짐.
+	// SWP는 세마포어를 구현하기 위해 사용했으나 지금은 ldrex, strex를 사용함.
 	orr     r5, r5, #(1 << 10)              @ set SW bit in "clear"
 	bic     r6, r6, #(1 << 10)              @ clear it in "mmuset"
 #endif
-   	mrc	p15, 0, r0, c1, c0, 0		@ read control register
+   	mrc	p15, 0, r0, c1, c0, 0		@ read control register,  ARM B4.1.130 System Control Register
 	bic	r0, r0, r5			@ clear bits them
 	orr	r0, r0, r6			@ set them
  THUMB(	orr	r0, r0, #1 << 30	)	@ Thumb exceptions
@@ -456,10 +468,10 @@ __v7_ca7mp_proc_info:
 	 * ARM Ltd. Cortex A15 processor.
 	 */
 	.type	__v7_ca15mp_proc_info, #object
-__v7_ca15mp_proc_info:
+__v7_ca15mp_proc_info:						//arch/arm/include/asm/procinfo.h
 	.long	0x410fc0f0
 	.long	0xff0ffff0
-	__v7_proc __v7_ca15mp_setup
+	__v7_proc __v7_ca15mp_setup			
 	.size	__v7_ca15mp_proc_info, . - __v7_ca15mp_proc_info
 
 	/*

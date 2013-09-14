@@ -6,7 +6,7 @@
  *
  * see Documentation/lockdep-design.txt for more details.
  */
-#ifndef __LINUX_LOCKDEP_H
+#ifndef __LINUX_LOCKDEP_H		//def no
 #define __LINUX_LOCKDEP_H
 
 struct task_struct;
@@ -479,7 +479,7 @@ static inline void print_irqtrace_events(struct task_struct *curr)
  * on the per lock-class debug mode:
  */
 
-#ifdef CONFIG_DEBUG_LOCK_ALLOC
+#ifdef CONFIG_DEBUG_LOCK_ALLOC  // arm10c N
 # ifdef CONFIG_PROVE_LOCKING
 #  define spin_acquire(l, s, t, i)		lock_acquire(l, s, t, 0, 2, NULL, i)
 #  define spin_acquire_nest(l, s, t, n, i)	lock_acquire(l, s, t, 0, 2, n, i)

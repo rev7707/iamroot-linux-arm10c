@@ -89,12 +89,12 @@
 # include <linux/spinlock_up.h>
 #endif
 
-#ifdef CONFIG_DEBUG_SPINLOCK
+#ifdef CONFIG_DEBUG_SPINLOCK	// def yes
   extern void __raw_spin_lock_init(raw_spinlock_t *lock, const char *name,
 				   struct lock_class_key *key);
-# define raw_spin_lock_init(lock)				\
+# define raw_spin_lock_init(lock)		\	/* GFS */
 do {								\
-	static struct lock_class_key __key;			\
+	static struct lock_class_key __key;			\		/* lock_class struct lock_class_key { }; */
 								\
 	__raw_spin_lock_init((lock), #lock, &__key);		\
 } while (0)
@@ -269,6 +269,8 @@ static inline void do_raw_spin_unlock(raw_spinlock_t *lock) __releases(lock)
  * Map the spin_lock functions to the raw variants for PREEMPT_RT=n
  */
 
+// 인자의 타입이 다를 경우 워닝 메시지가 나옴, 
+//리턴은 최적화되어 함수가 아예실행되지 않을 가능성을 제거하기 위함.
 static inline raw_spinlock_t *spinlock_check(spinlock_t *lock)
 {
 	return &lock->rlock;

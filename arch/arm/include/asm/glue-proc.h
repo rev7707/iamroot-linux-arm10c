@@ -221,7 +221,7 @@
 # endif
 #endif
 
-#ifdef CONFIG_CPU_V7
+#ifdef CONFIG_CPU_V7	//def yes
 # ifdef CPU_NAME
 #  undef  MULTI_CPU
 #  define MULTI_CPU

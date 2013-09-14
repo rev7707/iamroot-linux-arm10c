@@ -19,14 +19,14 @@
 
 typedef struct raw_spinlock {
 	arch_spinlock_t raw_lock;
-#ifdef CONFIG_GENERIC_LOCKBREAK
+#ifdef CONFIG_GENERIC_LOCKBREAK		//def no
 	unsigned int break_lock;
 #endif
-#ifdef CONFIG_DEBUG_SPINLOCK
+#ifdef CONFIG_DEBUG_SPINLOCK		//def yes
 	unsigned int magic, owner_cpu;
 	void *owner;
 #endif
-#ifdef CONFIG_DEBUG_LOCK_ALLOC
+#ifdef CONFIG_DEBUG_LOCK_ALLOC		//def no
 	struct lockdep_map dep_map;
 #endif
 } raw_spinlock_t;
@@ -65,7 +65,7 @@ typedef struct spinlock {
 	union {
 		struct raw_spinlock rlock;
 
-#ifdef CONFIG_DEBUG_LOCK_ALLOC
+#ifdef CONFIG_DEBUG_LOCK_ALLOC	//def no
 # define LOCK_PADSIZE (offsetof(struct raw_spinlock, dep_map))
 		struct {
 			u8 __padding[LOCK_PADSIZE];

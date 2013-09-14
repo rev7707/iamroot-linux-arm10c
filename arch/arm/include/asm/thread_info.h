@@ -92,7 +92,7 @@ struct thread_info {
  * how to get the thread information struct from C
  */
 static inline struct thread_info *current_thread_info(void) __attribute_const__;
-
+//ARM10C 2013/08/24
 static inline struct thread_info *current_thread_info(void)
 {
 	register unsigned long sp asm ("sp");

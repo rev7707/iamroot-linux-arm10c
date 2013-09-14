@@ -18,8 +18,8 @@ static inline bool is_smp(void)
 #ifndef CONFIG_SMP
 	return false;
 #elif defined(CONFIG_SMP_ON_UP)
-	extern unsigned int smp_on_up;
-	return !!smp_on_up;
+	extern unsigned int smp_on_up;		// 1 :arch/arm/kernel/head.S
+	return !!smp_on_up;					// !!는 어떤숫자든 0또는 1으로 만든다.
 #else
 	return true;
 #endif

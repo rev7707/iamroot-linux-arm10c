@@ -468,8 +468,21 @@ static void __init mm_init(void)
 	vmalloc_init();
 }
 
+
+//__init : __section(.init.text) 이 함수를 지정된 섹션에 넣는다.
+// attribute의 cold : size를 최적화하기 위한 옵션.
+//asmlinkage : x86에서는 Calling convention이 다른 경우가 있고, ARM은 따로 처리하는 부분이 없다.
+//             http://www.spinics.net/lists/arm-kernel/msg87677.html
+//
+// attribute 설명:
+// http://gcc.gnu.org/onlinedocs/gcc-4.6.1/gcc/Function-Attributes.html#Function-Attributes
+
+
 asmlinkage void __init start_kernel(void)
 {
+	// ATAG,DTB 정보, Documentation/kernel-parameters.txt
+	// __start___param is defined in include/asm-generic/vmlinux.lds.h
+
 	char * command_line;
 	extern const struct kernel_param __start___param[], __stop___param[];
 
@@ -477,18 +490,20 @@ asmlinkage void __init start_kernel(void)
 	 * Need to run as early as possible, to initialize the
 	 * lockdep hash:
 	 */
-	lockdep_init();
-	smp_setup_processor_id();
-	debug_objects_early_init();
+	lockdep_init();				// LOCK_DEP 가 우리는 선언이 안되어 있어서 무시
+	smp_setup_processor_id();	// weak 로 선언되었을경우, 다른곳에 global함수가 있으면 그것으로 대체됨. 
+								// arch/arm/kernel/setup.c에 있는것 사용됨.
+								// 현재 돌아가는 CPUID 찾고, CPUID0~3을 맵핑시킨다. cpu_local_map
+	debug_objects_early_init(); // CONFIG_DEBUG_OBJECTS not defined 무시. 
 
 	/*
 	 * Set up the the initial canary ASAP:
 	 */
-	boot_init_stack_canary();
+	boot_init_stack_canary();	//선언안됨 무시 
 
-	cgroup_init_early();
+	cgroup_init_early();		//!CONFIG_CGROUPS
 
-	local_irq_disable();
+	local_irq_disable();		// cpsr의 interrupt flag 세팅.
 	early_boot_irqs_disabled = true;
 
 /*
@@ -496,6 +511,7 @@ asmlinkage void __init start_kernel(void)
  * enable them
  */
 	boot_cpu_init();
+	//2013/09/07 종료 
 	page_address_init();
 	pr_notice("%s", linux_banner);
 	setup_arch(&command_line);

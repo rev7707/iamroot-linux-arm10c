@@ -11,6 +11,8 @@
  *
  *  Kernel startup code for all 32-bit CPUs
  */
+//2013/08/10일 시작
+
 #include <linux/linkage.h>
 #include <linux/init.h>
 
@@ -34,10 +36,17 @@
  * the least significant 16 bits to be 0x8000, but we could probably
  * relax this restriction to KERNEL_RAM_VADDR >= PAGE_OFFSET + 0x4000.
  */
+
+// PAGE_OFFSET defined inf include/asm/memory.h
+// PAGE_OFFSET:0xC0000000, TEXT_OFFSET:0x8000
+
 #define KERNEL_RAM_VADDR	(PAGE_OFFSET + TEXT_OFFSET)
 #if (KERNEL_RAM_VADDR & 0xffff) != 0x8000
 #error KERNEL_RAM_VADDR must start at 0xXXXX8000
 #endif
+
+//large physical address address, 물리적으로 64bit 이지만 사용은 40bit address size.
+// was not set CONFIG_ARM_LPAE in .config
 
 #ifdef CONFIG_ARM_LPAE
 	/* LPAE requires an additional page for the PGD */
@@ -45,11 +54,11 @@
 #define PMD_ORDER	3
 #else
 #define PG_DIR_SIZE	0x4000
-#define PMD_ORDER	2
+#define PMD_ORDER	2				//page middle directory
 #endif
 
 	.globl	swapper_pg_dir
-	.equ	swapper_pg_dir, KERNEL_RAM_VADDR - PG_DIR_SIZE
+	.equ	swapper_pg_dir, KERNEL_RAM_VADDR - PG_DIR_SIZE	// equ::일종의 define, 결과값:0xc0004000
 
 	.macro	pgtbl, rd, phys
 	add	\rd, \phys, #TEXT_OFFSET - PG_DIR_SIZE
@@ -75,7 +84,7 @@
  */
 	.arm
 
-	__HEAD
+	__HEAD		// defined in vmlinux.lds, section define ==> 0xc00000800
 ENTRY(stext)
 
  THUMB(	adr	r9, BSYM(1f)	)	@ Kernel is always entered in ARM.
@@ -86,14 +95,15 @@ ENTRY(stext)
 #ifdef CONFIG_ARM_VIRT_EXT
 	bl	__hyp_stub_install
 #endif
-	@ ensure svc mode and all interrupts masked
+								@ ensure svc mode and all interrupts masked
 	safe_svcmode_maskall r9
 
+	@@ Processor ID 체크하고 없으면 에러 처리.
 	mrc	p15, 0, r9, c0, c0		@ get processor id
 	bl	__lookup_processor_type		@ r5=procinfo r9=cpuid
 	movs	r10, r5				@ invalid processor (r5=0)?
  THUMB( it	eq )		@ force fixup-able long branch encoding
-	beq	__error_p			@ yes, error 'p'
+	beq	__error_p			@ yes, error 'p'			// CPUID가 0이면 예외처리.
 
 #ifdef CONFIG_ARM_LPAE
 	mrc	p15, 0, r3, c0, c1, 4		@ read ID_MMFR0
@@ -103,9 +113,10 @@ ENTRY(stext)
 	blo	__error_p			@ only classic page table format
 #endif
 
+	@@ XIP 일 경우 주소 보정.
 #ifndef CONFIG_XIP_KERNEL
 	adr	r3, 2f
-	ldmia	r3, {r4, r8}
+	ldmia	r3, {r4, r8}	// r4:배치전 코드위치,  r8:PAGE_OFFSET
 	sub	r4, r3, r4			@ (PHYS_OFFSET - PAGE_OFFSET)
 	add	r8, r8, r4			@ PHYS_OFFSET
 #else
@@ -116,13 +127,19 @@ ENTRY(stext)
 	 * r1 = machine no, r2 = atags or dtb,
 	 * r8 = phys_offset, r9 = cpuid, r10 = procinfo
 	 */
-	bl	__vet_atags
+	@@ dtb/atag가 유효한지 확인.
+	bl	__vet_atags				// head-common.S
 #ifdef CONFIG_SMP_ON_UP
-	bl	__fixup_smp
+	// 싱글코어일(uni processor) 경우 보정작엄.
+	bl	__fixup_smp				
 #endif
 #ifdef CONFIG_ARM_PATCH_PHYS_VIRT
+	
+	// phy와 vir 변환 함수를 실시간에 코드를 넣어줌.
+	// page table이 1MB section descriptor 를 만드므로 1MB align해 주는 과정.
 	bl	__fixup_pv_table
 #endif
+	@@ kernel, DTB, debug io,  page table 만듬
 	bl	__create_page_tables
 
 	/*
@@ -135,8 +152,8 @@ ENTRY(stext)
 	ldr	r13, =__mmap_switched		@ address to jump to after
 						@ mmu has been enabled
 	adr	lr, BSYM(1f)			@ return (PIC) address
-	mov	r8, r4				@ set TTBR1 to swapper_pg_dir
- ARM(	add	pc, r10, #PROCINFO_INITFUNC	)
+	mov	r8, r4					@ set TTBR1 to swapper_pg_dir, r4: page table base:0x40004000
+ ARM(	add	pc, r10, #PROCINFO_INITFUNC	)			@@ arch/arm/mm/proc-v7.S/ __v7_ca15mp_setup 
  THUMB(	add	r12, r10, #PROCINFO_INITFUNC	)
  THUMB(	mov	pc, r12				)
 1:	b	__enable_mmu
@@ -159,7 +176,10 @@ ENDPROC(stext)
  *  r4 = physical page table address
  */
 __create_page_tables:
-	pgtbl	r4, r8				@ page table address
+								@@ r8 = 0x40000000: phys_offset, ram start address.
+								@@ r4 = 0x40004000 page directory 의 시작주소
+								@ page table address @@ r4 = r8 + 0x4000
+	pgtbl	r4, r8
 
 	/*
 	 * Clear the swapper page table
@@ -202,20 +222,30 @@ __create_page_tables:
 #endif
 #endif
 
-	ldr	r7, [r10, #PROCINFO_MM_MMUFLAGS] @ mm_mmuflags
+	// r10=proc_info, defined in kernel/asm-offset.c, asm/procinfo.h
+	// proc_info_list의 __cpu_mm_mmu_flags 값을 읽어옴.
+	// page tale의 section entry 를 만든다.
+
+	ldr	r7, [r10, #PROCINFO_MM_MMUFLAGS] @ mm_mmuflags, 
 
 	/*
 	 * Create identity mapping to cater for __enable_mmu.
 	 * This identity mapping will be removed by paging_init().
 	 */
+	
+	
 	adr	r0, __turn_mmu_on_loc
-	ldmia	r0, {r3, r5, r6}
+	ldmia	r0, {r3, r5, r6}	
 	sub	r0, r0, r3			@ virt->phys offset
 	add	r5, r5, r0			@ phys __turn_mmu_on
 	add	r6, r6, r0			@ phys __turn_mmu_on_end
-	mov	r5, r5, lsr #SECTION_SHIFT
-	mov	r6, r6, lsr #SECTION_SHIFT
+	mov	r5, r5, lsr #SECTION_SHIFT		// 2level page table, 20bit(1MB), section entry address
+	mov	r6, r6, lsr #SECTION_SHIFT		
 
+	// r0: v-p offset r3:turn_mmu_on_loc, r5:turn_mmu_on, r6:turn_mmu_end
+	// r7: page tabel section entry property 
+	// mmu를 켜면 주소가 바뀌므로, mmu_turn_on 함수를 일부공간에 매핑시켜놓는다. 
+	
 1:	orr	r3, r7, r5, lsl #SECTION_SHIFT	@ flags + kernel base
 	str	r3, [r4, r5, lsl #PMD_ORDER]	@ identity mapping
 	cmp	r5, r6
@@ -225,15 +255,25 @@ __create_page_tables:
 	/*
 	 * Map our RAM from the start to the end of the kernel .bss section.
 	 */
+	// PAGE_OFFSET : 0XC0000000
+	// PMD_ORDER : 2
+	// 0X40004000 + (0XC0000000 >> (20-2))
+	// R0 :: 0XC0000000에 해당하는 페이지엔트리 BASE 주소
+	// R6 :: vmlinux 이미지의 끝 주소값-1
+	// R8 :: 0x4000000
+
 	add	r0, r4, #PAGE_OFFSET >> (SECTION_SHIFT - PMD_ORDER)
 	ldr	r6, =(_end - 1)
 	orr	r3, r8, r7
 	add	r6, r4, r6, lsr #(SECTION_SHIFT - PMD_ORDER)
-1:	str	r3, [r0], #1 << PMD_ORDER
+
+1:	str	r3, [r0], #1 << PMD_ORDER		
 	add	r3, r3, #1 << SECTION_SHIFT
 	cmp	r0, r6
 	bls	1b
-
+	
+	// 2013/08/10 종료
+	// 2013/08/17 시작
 #ifdef CONFIG_XIP_KERNEL
 	/*
 	 * Map the kernel image separately as it is not located in RAM.
@@ -257,21 +297,24 @@ __create_page_tables:
 	 * Then map boot params address in r2 if specified.
 	 * We map 2 sections in case the ATAGs/DTB crosses a section boundary.
 	 */
-	mov	r0, r2, lsr #SECTION_SHIFT
-	movs	r0, r0, lsl #SECTION_SHIFT
-	subne	r3, r0, r8
-	addne	r3, r3, #PAGE_OFFSET
-	addne	r3, r4, r3, lsr #(SECTION_SHIFT - PMD_ORDER)
-	orrne	r6, r7, r0
-	strne	r6, [r3], #1 << PMD_ORDER
-	addne	r6, r6, #1 << SECTION_SHIFT
-	strne	r6, [r3]
+	mov	r0, r2, lsr #SECTION_SHIFT			@@ r2: atag, DTB 의 시작주소.
+	movs	r0, r0, lsl #SECTION_SHIFT		@@ 20bit(1MB)  align, Base address(31-20)까지 날림.
+	subne	r3, r0, r8						@@ r8:0x40000000(PHYS_OFFSET)  
+	addne	r3, r3, #PAGE_OFFSET			@@ PAGE_OFFSET :0xC0000000
+	addne	r3, r4, r3, lsr #(SECTION_SHIFT - PMD_ORDER)  @@ r4:pagetable base address 0x40004000, PMD_ORDER:2, r3:section entry의 offset from page table
+														  @@ 20bit:1M당 1, 18bit:1M당 4byte씩 증가하도록 계산
+														  @@ 계산결과:r3는 entry의 주소가 된다.
+	orrne	r6, r7, r0						@@ r6:mmu의 pvtable 위치, r7: Sectoin Entry 속성.
+	strne	r6, [r3], #1 << PMD_ORDER		@@ r6:1M section Entry address, r3:page table address
+	addne	r6, r6, #1 << SECTION_SHIFT		@@ r6: 2번째 1MB section  address.
+	strne	r6, [r3]					
 
 #if defined(CONFIG_ARM_LPAE) && defined(CONFIG_CPU_ENDIAN_BE8)
 	sub	r4, r4, #4			@ Fixup page table pointer
 						@ for 64-bit descriptors
 #endif
 
+						@@ UART 디버깅 설정.
 #ifdef CONFIG_DEBUG_LL
 #if !defined(CONFIG_DEBUG_ICEDCC) && !defined(CONFIG_DEBUG_SEMIHOSTING)
 	/*
@@ -458,13 +501,13 @@ ENDPROC(__enable_mmu)
 	.align	5
 	.pushsection	.idmap.text, "ax"
 ENTRY(__turn_mmu_on)
-	mov	r0, r0
-	instr_sync
+	mov	r0, r0						@ISB가 지원되지 않는 코어에서 Barrier를 하기 위함.
+	instr_sync						@ ARM A3.8.3 Memory barriers
 	mcr	p15, 0, r0, c1, c0, 0		@ write control reg
 	mrc	p15, 0, r3, c0, c0, 0		@ read id reg
 	instr_sync
-	mov	r3, r3
-	mov	r3, r13
+	mov	r3, r3						@instruction Barrier
+	mov	r3, r13						@ r13=__mmap_switched defined kernel/head-common.S
 	mov	pc, r3
 __turn_mmu_on_end:
 ENDPROC(__turn_mmu_on)
@@ -474,10 +517,15 @@ ENDPROC(__turn_mmu_on)
 #ifdef CONFIG_SMP_ON_UP
 	__INIT
 __fixup_smp:
+	// symetric multi core 인지 확인하여, 싱글코어의 경우 보정작업시도.
+	// 0xf0000이 아닐경우 무조건 싱글코어, 맞을 경우 싱글코어도 있음.
+	// r9:0x410fc0f0 , cpuid from v7_ca15mp_proc_info, ARM B4.1.105 참조.cp15에서 가져옴.
+
 	and	r3, r9, #0x000f0000	@ architecture version
 	teq	r3, #0x000f0000		@ CPU ID supported?
 	bne	__fixup_smp_on_up	@ no, assume UP
 
+	// arm11일 경우 처리.
 	bic	r3, r9, #0x00ff0000
 	bic	r3, r3, #0x0000000f	@ mask 0xff00fff0
 	mov	r4, #0x41000000
@@ -486,14 +534,16 @@ __fixup_smp:
 	teq	r3, r4			@ ARM 11MPCore?
 	moveq	pc, lr			@ yes, assume SMP
 
+	//싱글코어인지 다시 확인.
 	mrc	p15, 0, r0, c0, c0, 5	@ read MPIDR
 	and	r0, r0, #0xc0000000	@ multiprocessing extensions and
-	teq	r0, #0x80000000		@ not part of a uniprocessor system?
+	teq	r0, #0x80000000		@ not part of a uniprocessor system?, 10.....일경우만 멀티코어
 	moveq	pc, lr			@ yes, assume SMP
 
+	//Sing core에서 돌경우의 보정작업
 __fixup_smp_on_up:
 	adr	r0, 1f
-	ldmia	r0, {r3 - r5}
+	ldmia	r0, {r3 - r5}	//r3: 1f, r4:smpalt_begin, r5:smpalt_end
 	sub	r3, r0, r3
 	add	r4, r4, r3
 	add	r5, r5, r3
@@ -502,7 +552,7 @@ ENDPROC(__fixup_smp)
 
 	.align
 1:	.word	.
-	.word	__smpalt_begin
+	.word	__smpalt_begin		//vmlinux.lds, CONFIG_SMP_ON_UP=y, at.smp.init(altinative symetric processor)
 	.word	__smpalt_end
 
 	.pushsection .data
@@ -547,14 +597,14 @@ ENDPROC(fixup_smp)
  */
 	__HEAD
 __fixup_pv_table:
-	adr	r0, 1f
-	ldmia	r0, {r3-r5, r7}
+	adr	r0, 1f					
+	ldmia	r0, {r3-r5, r7}		// r3:1f, r4:bein, r5:end, r7:offset
 	sub	r3, r0, r3	@ PHYS_OFFSET - PAGE_OFFSET
 	add	r4, r4, r3	@ adjust table start address
 	add	r5, r5, r3	@ adjust table end address
 	add	r7, r7, r3	@ adjust __pv_phys_offset address
-	str	r8, [r7]	@ save computed PHYS_OFFSET to __pv_phys_offset
-	mov	r6, r3, lsr #24	@ constant for add/sub instructions
+	str	r8, [r7]	@ save computed PHYS_OFFSET to __pv_phys_offset, r8: physical address offset=물리메모리-로드된 메모리
+	mov	r6, r3, lsr #24	@ constant for add/sub instructions	, 16MB clear
 	teq	r3, r6, lsl #24 @ must be 16MiB aligned
 THUMB(	it	ne		@ cross section branch )
 	bne	__error
@@ -564,7 +614,7 @@ ENDPROC(__fixup_pv_table)
 
 	.align
 1:	.long	.
-	.long	__pv_table_begin
+	.long	__pv_table_begin			//asm/memory.h
 	.long	__pv_table_end
 2:	.long	__pv_phys_offset
 
@@ -587,8 +637,8 @@ __fixup_a_pv_table:
 	and	ip, 0x8f00
 	orr	ip, r6	@ mask in offset bits 31-24
 	strh	ip, [r7, #2]
-2:	cmp	r4, r5
-	ldrcc	r7, [r4], #4	@ use branch for delay slot
+2:	cmp	r4, r5				// begin, end
+	ldrcc	r7, [r4], #4	@ use branch for delay slot, 
 	bcc	1b
 	bx	lr
 #else

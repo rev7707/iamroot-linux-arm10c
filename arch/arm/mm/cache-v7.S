@@ -88,11 +88,12 @@ ENDPROC(v7_flush_icache_all)
  */
 
 ENTRY(v7_flush_dcache_louis)
-	dmb					@ ensure ordering with previous memory accesses
-	mrc	p15, 1, r0, c0, c0, 1		@ read clidr, r0 = clidr
-	ALT_SMP(ands	r3, r0, #(7 << 21))	@ extract LoUIS from clidr
+	dmb								@ ensure ordering with previous memory accesses
+	mrc	p15, 1, r0, c0, c0, 1		@ read clidr, r0 = clidr, Level of coherecy id register.
+	ALT_SMP(ands	r3, r0, #(7 << 21))	@ extract LoUIS from clidr,Level of Unification Inner Shareable for the cache hierarchy
 	ALT_UP(ands	r3, r0, #(7 << 27))	@ extract LoUU from clidr
-#ifdef CONFIG_ARM_ERRATA_643719
+
+#ifdef CONFIG_ARM_ERRATA_643719		@@ ERRATA 칩이나 펌웨어가 에러가 있을 경우 패치하는 것.	
 	ALT_SMP(mrceq	p15, 0, r2, c0, c0, 0)	@ read main ID register
 	ALT_UP(moveq	pc, lr)			@ LoUU is zero, so nothing to do
 	ldreq	r1, =0x410fc090                 @ ID of ARM Cortex A9 r0p?
@@ -100,11 +101,12 @@ ENTRY(v7_flush_dcache_louis)
 	teqeq	r2, r1                          @ test for errata affected core and if so...
 	orreqs	r3, #(1 << 21)			@   fix LoUIS value (and set flags state to 'ne')
 #endif
-	ALT_SMP(mov	r3, r3, lsr #20)	@ r3 = LoUIS * 2
+
+	ALT_SMP(mov	r3, r3, lsr #20)	@ r3 = LoUIS * 2,TRM에 보면 1이다.
 	ALT_UP(mov	r3, r3, lsr #26)	@ r3 = LoUU * 2
 	moveq	pc, lr				@ return if level == 0
 	mov	r10, #0				@ r10 (starting level) = 0
-	b	flush_levels			@ start flushing cache levels
+	b	flush_levels			@ start flushing cache levels, exynos는 점프한다.
 ENDPROC(v7_flush_dcache_louis)
 
 /*
@@ -123,8 +125,10 @@ ENTRY(v7_flush_dcache_all)
 	mov	r3, r3, lsr #23			@ left align loc bit field
 	beq	finished			@ if loc is 0, then no need to clean
 	mov	r10, #0				@ start clean at cache level 0
+
+	// compressed/head.S의 loop1 참조.
 flush_levels:
-	add	r2, r10, r10, lsr #1		@ work out 3x current cache level
+	add	r2, r10, r10, lsr #1		@ work out 3x current cache level, r10:0
 	mov	r1, r0, lsr r2			@ extract cache type bits from clidr
 	and	r1, r1, #7			@ mask of the bits for current cache only
 	cmp	r1, #2				@ see what cache we have at this level
@@ -203,7 +207,7 @@ ENDPROC(v7_flush_kern_cache_all)
 ENTRY(v7_flush_kern_cache_louis)
  ARM(	stmfd	sp!, {r4-r5, r7, r9-r11, lr}	)
  THUMB(	stmfd	sp!, {r4-r7, r9-r11, lr}	)
-	bl	v7_flush_dcache_louis
+	bl	v7_flush_dcache_louis			@@ D-cache flush
 	mov	r0, #0
 	ALT_SMP(mcr	p15, 0, r0, c7, c1, 0)	@ invalidate I-cache inner shareable
 	ALT_UP(mcr	p15, 0, r0, c7, c5, 0)	@ I+BTB cache invalidate

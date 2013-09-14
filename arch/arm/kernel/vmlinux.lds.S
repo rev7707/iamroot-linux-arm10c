@@ -179,7 +179,7 @@ SECTIONS
 #endif
 	.init.pv_table : {
 		__pv_table_begin = .;
-		*(.pv_table)
+		*(.pv_table)			//asm/memory.h
 		__pv_table_end = .;
 	}
 	.init.data : {
